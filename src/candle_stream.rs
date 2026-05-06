@@ -543,9 +543,9 @@ impl<T: CandleStick> CandleStream<T> {
     pub fn is_downtrend(&self) -> bool {
         match (self.get(), self.prev(1), self.prev(2)) {
             (Some(c0), Some(c1), Some(c2)) => {
-                (c0.high() < c1.high() && c1.high() < c2.high()) &&
-                (c0.low() < c1.low() && c1.low() < c2.low())
-            },
+                (c0.high() < c1.high() && c1.high() < c2.high())
+                    && (c0.low() < c1.low() && c1.low() < c2.low())
+            }
             _ => false,
         }
     }
@@ -555,9 +555,9 @@ impl<T: CandleStick> CandleStream<T> {
     pub fn is_uptrend(&self) -> bool {
         match (self.get(), self.prev(1), self.prev(2)) {
             (Some(c0), Some(c1), Some(c2)) => {
-                (c0.high() > c1.high() && c1.high() > c2.high()) &&
-                (c0.low() > c1.low() && c1.low() > c2.low())
-            },
+                (c0.high() > c1.high() && c1.high() > c2.high())
+                    && (c0.low() > c1.low() && c1.low() > c2.low())
+            }
             _ => false,
         }
     }

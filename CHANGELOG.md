@@ -1,3 +1,8 @@
+## v0.2.4 (May 6, 2026)
+
+- Removed lifetime parameter  - contribution by @joelchen (#5)
+- Added is_downtrend, is_uptrend functions  - contribution by @joelchen (#5)
+
 ## v0.2.3 (Dec 22, 2025)
 
 - Implemented CandleStick trait for tuple reference
