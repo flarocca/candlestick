@@ -32,12 +32,12 @@ const SERIES_SIZE: usize = 5;
 /// ```
 
 #[derive(Debug)]
-pub struct CandleStream<'s, T> {
-    series: [Option<&'s T>; SERIES_SIZE],
+pub struct CandleStream<T> {
+    series: [Option<T>; SERIES_SIZE],
     idx: usize,
 }
 
-impl<'s, T> CandleStream<'s, T> {
+impl<T> CandleStream<T> {
     /// Returns a new candle series
     pub fn new() -> Self {
         Self::default()
@@ -55,7 +55,7 @@ impl<'s, T> CandleStream<'s, T> {
     // Returns the candle at the given index
     fn at(&self, idx: usize) -> Option<&T> {
         match idx < SERIES_SIZE {
-            true => self.series[idx],
+            true => self.series[idx].as_ref(),
             false => None,
         }
     }
@@ -71,14 +71,14 @@ impl<'s, T> CandleStream<'s, T> {
     }
 
     /// Pushes a candle to the series
-    pub fn push(&mut self, candle: &'s T) -> &mut Self {
+    pub fn push(&mut self, candle: T) -> &mut Self {
         self.series[self.idx % SERIES_SIZE] = Some(candle);
         self.idx = (self.idx + 1) % SERIES_SIZE;
         self
     }
 }
 
-impl<T: CandleStick> CandleStream<'_, T> {
+impl<T: CandleStick> CandleStream<T> {
     /// Identifies a Bullish Doji Star pattern, a potential reversal signal in downtrends.
     ///
     /// This two-candle pattern occurs when a bearish candle is followed by a Doji that gaps below
@@ -93,7 +93,7 @@ impl<T: CandleStick> CandleStream<'_, T> {
     /// # Example
     /// ```
     /// use candlestick_rs::CandleStream;
-    /// let prev = (52.0, 52.5, 48.0, 48.5, 0.0);      
+    /// let prev = (52.0, 52.5, 48.0, 48.5, 0.0);
     /// let curr = (47.0, 47.5, 46.8, 47.0, 0.0);
     /// let mut series = CandleStream::new();
     /// assert!(series.push(&prev).push(&curr).is_bullish_doji_star());
@@ -342,7 +342,7 @@ impl<T: CandleStick> CandleStream<'_, T> {
     /// use candlestick_rs::CandleStream;
     /// let prev2 = (52.0, 52.5, 48.0, 48.5, 0.0);
     /// let prev1 = (48.2, 48.9, 47.5, 48.3, 0.0);
-    /// let curr = (48.7, 51.5, 48.5, 51.2, 0.0);   
+    /// let curr = (48.7, 51.5, 48.5, 51.2, 0.0);
     /// let mut series = CandleStream::new();
     /// assert!(series.push(&prev2).push(&prev1).push(&curr).is_morning_star());
     /// ```
@@ -537,9 +537,33 @@ impl<T: CandleStick> CandleStream<'_, T> {
                     && !c.is_doji()
             })
     }
+
+    /// Identifies a downtrend from the last 3 candles.
+    /// A downtrend is defined as a series of strictly lower highs and lower lows.
+    pub fn is_downtrend(&self) -> bool {
+        match (self.get(), self.prev(1), self.prev(2)) {
+            (Some(c0), Some(c1), Some(c2)) => {
+                (c0.high() < c1.high() && c1.high() < c2.high())
+                    && (c0.low() < c1.low() && c1.low() < c2.low())
+            }
+            _ => false,
+        }
+    }
+
+    /// Identifies an uptrend from the last 3 candles.
+    /// An uptrend is defined as a series of strictly higher highs and higher lows.
+    pub fn is_uptrend(&self) -> bool {
+        match (self.get(), self.prev(1), self.prev(2)) {
+            (Some(c0), Some(c1), Some(c2)) => {
+                (c0.high() > c1.high() && c1.high() > c2.high())
+                    && (c0.low() > c1.low() && c1.low() > c2.low())
+            }
+            _ => false,
+        }
+    }
 }
 
-impl<T> Default for CandleStream<'_, T> {
+impl<T> Default for CandleStream<T> {
     fn default() -> Self {
         Self {
             series: [const { None }; SERIES_SIZE],
@@ -600,13 +624,13 @@ mod tests {
         let candle6 = (117.5, 120.0, 116.0, 119.0, 0.0);
 
         let mut stream = CandleStream::new();
-        stream.push(&candle1).push(&candle2);
+        stream.push(candle1).push(candle2);
 
         assert_eq!(stream.at(0), Some(&candle1));
         assert_eq!(stream.at(1), Some(&candle2));
         assert_eq!(stream.at(2), None);
 
-        stream.push(&candle3).push(&candle4).push(&candle5);
+        stream.push(candle3).push(candle4).push(candle5);
 
         assert_eq!(stream.at(0), Some(&candle1));
         assert_eq!(stream.at(1), Some(&candle2));
@@ -614,7 +638,7 @@ mod tests {
         assert_eq!(stream.at(3), Some(&candle4));
         assert_eq!(stream.at(4), Some(&candle5));
 
-        stream.push(&candle6);
+        stream.push(candle6);
 
         assert_eq!(stream.at(0), Some(&candle6));
         assert_eq!(stream.at(1), Some(&candle2));
@@ -632,16 +656,16 @@ mod tests {
         let mut stream = CandleStream::new();
         assert_eq!(stream.get(), None);
 
-        stream.push(&candle1);
+        stream.push(candle1);
         assert_eq!(stream.get(), Some(&candle1));
 
-        stream.push(&candle2);
+        stream.push(candle2);
         assert_eq!(stream.get(), Some(&candle2));
 
-        stream.push(&candle3).push(&candle1).push(&candle2);
+        stream.push(candle3).push(candle1).push(candle2);
         assert_eq!(stream.get(), Some(&candle2));
 
-        stream.push(&candle3);
+        stream.push(candle3);
         assert_eq!(stream.get(), Some(&candle3));
     }
 
@@ -654,13 +678,13 @@ mod tests {
         let mut stream = CandleStream::new();
         assert_eq!(stream.prev(1), None);
 
-        stream.push(&candle1);
+        stream.push(candle1);
         assert_eq!(stream.prev(1), None);
 
-        stream.push(&candle2);
+        stream.push(candle2);
         assert_eq!(stream.prev(1), Some(&candle1));
 
-        stream.push(&candle3);
+        stream.push(candle3);
         assert_eq!(stream.prev(1), Some(&candle2));
         assert_eq!(stream.prev(2), Some(&candle1));
     }
@@ -862,12 +886,12 @@ mod tests {
         let prev1: (f64, f64, f64, f64, f64) = (49.5, 49.8, 48.5, 49.0, 0.0);
         let curr: (f64, f64, f64, f64, f64) = (48.8, 49.0, 47.5, 47.9, 0.0);
 
-        let mut series: CandleStream<'_, (f64, f64, f64, f64, f64)> = CandleStream::new();
+        let mut series: CandleStream<(f64, f64, f64, f64, f64)> = CandleStream::new();
 
         assert!(series
-            .push(&prev2)
-            .push(&prev1)
-            .push(&curr)
+            .push(prev2)
+            .push(prev1)
+            .push(curr)
             .is_three_inside_down());
     }
 
@@ -1045,5 +1069,49 @@ mod tests {
 
         assert!(!series.push(&prev2).is_three_inside_down());
         assert!(!series.push(&prev1).is_three_inside_down());
+    }
+
+    #[test]
+    fn test_is_downtrend() {
+        let prev2 = (109.5, 112.0, 108.0, 111.0, 0.0);
+        let prev1 = (104.5, 110.0, 104.0, 109.0, 0.0);
+        let curr = (100.0, 105.0, 99.0, 104.0, 0.0);
+
+        let mut series = CandleStream::new();
+
+        assert!(series.push(&prev2).push(&prev1).push(&curr).is_downtrend());
+    }
+
+    #[test]
+    fn test_is_not_downtrend() {
+        let prev2 = (109.5, 112.0, 108.0, 111.0, 0.0);
+        let prev1 = (100.0, 105.0, 99.0, 104.0, 0.0);
+        let curr = (104.5, 110.0, 104.0, 109.0, 0.0);
+
+        let mut series = CandleStream::new();
+
+        assert!(!series.push(&prev2).push(&prev1).push(&curr).is_downtrend());
+    }
+
+    #[test]
+    fn test_is_uptrend() {
+        let prev2 = (100.0, 105.0, 99.0, 104.0, 0.0);
+        let prev1 = (104.5, 110.0, 104.0, 109.0, 0.0);
+        let curr = (109.5, 112.0, 108.0, 111.0, 0.0);
+
+        let mut series = CandleStream::new();
+
+        assert!(series.push(&prev2).push(&prev1).push(&curr).is_uptrend());
+    }
+
+    #[test]
+    fn test_is_not_uptrend() {
+        let prev2 = (100.0, 105.0, 99.0, 104.0, 0.0);
+        let prev1 = (109.5, 112.0, 108.0, 111.0, 0.0);
+        let curr = (104.5, 110.0, 104.0, 109.0, 0.0);
+
+        let mut series = CandleStream::new();
+
+        assert!(!series.push(&prev2).push(&prev1).push(&curr).is_uptrend());
     }
 }
