@@ -92,6 +92,36 @@ pub trait CandleStick {
         0.2
     }
 
+    /// Tweezer high/low tolerance (used by [`crate::CandleStream::is_tweezer_top`]
+    /// and [`crate::CandleStream::is_tweezer_bottom`]) as a fraction of the
+    /// larger of the two candle ranges. Can be overridden for custom ratio.
+    ///
+    /// Default: __5%__
+    fn tweezer_tolerance(&self) -> f64 {
+        0.05
+    }
+
+    /// Belt-Hold long-body-to-range ratio. A bullish belt hold requires
+    /// `body / range > belt_hold_body_ratio` together with virtually no
+    /// lower shadow; bearish belt hold mirrors with no upper shadow.
+    /// Can be overridden for custom ratio.
+    ///
+    /// Default: __70%__
+    fn belt_hold_body_ratio(&self) -> f64 {
+        0.7
+    }
+
+    /// High Wave minimum shadow-to-range ratio for both the upper and lower
+    /// shadow. The body band uses [`Self::doji_body_ratio`] as the lower
+    /// bound and [`Self::spinning_top_body_ratio`] as the upper bound; this
+    /// ratio governs the minimum shadow length on each side.
+    /// Can be overridden for custom ratio.
+    ///
+    /// Default: __40%__
+    fn high_wave_shadow_ratio(&self) -> f64 {
+        0.4
+    }
+
     /// Returns the open price
     fn open(&self) -> f64;
 
@@ -278,6 +308,64 @@ pub trait CandleStick {
     /// ```
     fn is_bearish_marubozu(&self) -> bool {
         self.is_bearish() && self.is_marubozu()
+    }
+
+    /// Identifies a Bullish Belt Hold (Yorikiri), a bullish reversal signal.
+    ///
+    /// This single-candle pattern features a bullish candle that opens at or
+    /// near the low of the session (no lower shadow) and closes near the
+    /// high after a sustained advance. The session starts with no early
+    /// selling pressure — buyers take control from the open and never give
+    /// it back.
+    ///
+    /// **Trading Significance**:
+    /// - Indicates buyers seized control from the opening bell
+    /// - Most meaningful after a downtrend — the absence of a lower shadow
+    ///   shows sellers were completely absent
+    /// - Often precedes follow-through on the next session, especially when
+    ///   volume confirms the breakout from the open
+    /// - Considered weaker than a full bullish marubozu (which also lacks an
+    ///   upper shadow) but stronger than a standard long bullish candle
+    ///
+    /// # Example
+    /// ```
+    /// use candlestick_rs::CandleStick;
+    /// let candle = (100.0, 110.0, 100.0, 109.0, 0.0);
+    /// assert!(candle.is_bullish_belt_hold());
+    /// ```
+    fn is_bullish_belt_hold(&self) -> bool {
+        self.is_bullish()
+            && self.body_range_ratio() > self.belt_hold_body_ratio()
+            && self.tail_range_ratio() < self.doji_min_ratio()
+    }
+
+    /// Identifies a Bearish Belt Hold (Yorikiri), a bearish reversal signal.
+    ///
+    /// Mirror of the bullish belt hold. A bearish candle opens at or near
+    /// the high of the session (no upper shadow) and closes near the low
+    /// after a sustained decline. The session opens with no early buying
+    /// pressure — sellers take control from the open and never give it
+    /// back.
+    ///
+    /// **Trading Significance**:
+    /// - Indicates sellers seized control from the opening bell
+    /// - Most meaningful after an uptrend — the absence of an upper shadow
+    ///   shows buyers were completely absent
+    /// - Often precedes follow-through on the next session, especially when
+    ///   volume confirms the breakdown from the open
+    /// - Considered weaker than a full bearish marubozu (which also lacks a
+    ///   lower shadow) but stronger than a standard long bearish candle
+    ///
+    /// # Example
+    /// ```
+    /// use candlestick_rs::CandleStick;
+    /// let candle = (110.0, 110.0, 100.0, 101.0, 0.0);
+    /// assert!(candle.is_bearish_belt_hold());
+    /// ```
+    fn is_bearish_belt_hold(&self) -> bool {
+        self.is_bearish()
+            && self.body_range_ratio() > self.belt_hold_body_ratio()
+            && self.wick_range_ratio() < self.doji_min_ratio()
     }
 
     /// Identifies a Hammer pattern, a significant bullish reversal signal.
@@ -490,6 +578,69 @@ pub trait CandleStick {
             && self.tail_range_ratio() < self.doji_min_ratio()
     }
 
+    /// Identifies a High Wave pattern, a high-volatility indecision signal.
+    ///
+    /// This single-candle pattern features a small body (slightly larger
+    /// than a doji's) with unusually long upper AND lower shadows of
+    /// comparable length. Unlike a spinning top — whose shadows are merely
+    /// "long" relative to the body — a high wave's shadows dominate the
+    /// session, signalling exceptional intra-period volatility despite a
+    /// muted net change.
+    ///
+    /// **Trading Significance**:
+    /// - Signals an unusually wide trading range with no directional
+    ///   conviction by the close
+    /// - Often appears at the apex of trends as both sides exhaust each
+    ///   other on a single bar
+    /// - Frequently precedes a regime shift — volatility expansion that
+    ///   resolves directionally in the next 1–3 sessions
+    /// - Less actionable on its own than a Doji or Spinning Top; usually
+    ///   waits for a follow-up candle to confirm direction
+    ///
+    /// # Example
+    /// ```
+    /// use candlestick_rs::CandleStick;
+    /// let candle = (95.0, 130.0, 70.0, 105.0, 0.0);
+    /// assert!(candle.is_high_wave());
+    /// ```
+    fn is_high_wave(&self) -> bool {
+        let body_ratio = self.body_range_ratio();
+        body_ratio > self.doji_body_ratio()
+            && body_ratio < self.spinning_top_body_ratio()
+            && self.wick_range_ratio() > self.high_wave_shadow_ratio()
+            && self.tail_range_ratio() > self.high_wave_shadow_ratio()
+    }
+
+    /// Identifies a Four-Price Doji, the most extreme indecision pattern.
+    ///
+    /// This pattern forms when the open, high, low, and close are all
+    /// effectively equal — the entire session prints at a single price.
+    /// It represents either perfect equilibrium between buyers and sellers
+    /// or — far more commonly — illiquid conditions where no trades crossed
+    /// at meaningfully different prices.
+    ///
+    /// **Trading Significance**:
+    /// - Most often a liquidity signal: thin order books, halted markets, or
+    ///   off-hours sessions
+    /// - When it appears mid-session on a liquid instrument, indicates
+    ///   extreme balance and potential breakout build-up
+    /// - Should usually be filtered out of pattern-detection systems on
+    ///   illiquid symbols since it carries no real signal
+    /// - Confirms-against-itself: a four-price doji in an otherwise active
+    ///   tape is a data-quality flag worth investigating
+    ///
+    /// # Example
+    /// ```
+    /// use candlestick_rs::CandleStick;
+    /// let candle = (100.0, 100.0, 100.0, 100.0, 0.0);
+    /// assert!(candle.is_four_price_doji());
+    /// ```
+    fn is_four_price_doji(&self) -> bool {
+        let price = self.close().abs();
+        let raw_range = self.high() - self.low();
+        raw_range < self.doji_min_ratio() * price
+    }
+
     /// Summarizes the price action for the candle
     fn typical_price(&self) -> f64 {
         (self.high() + self.low() + self.close()) / 3.0
@@ -550,5 +701,93 @@ impl CandleStick for &(f64, f64, f64, f64, f64) {
     /// Returns the volume
     fn volume(&self) -> f64 {
         self.4
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── Belt Hold ───────────────────────────────────────────────────────
+
+    #[test]
+    fn test_is_bullish_belt_hold() {
+        // Open == low, big body, tiny upper shadow.
+        let candle = (100.0, 110.0, 100.0, 109.0, 0.0);
+        assert!(candle.is_bullish_belt_hold());
+    }
+
+    #[test]
+    fn test_is_not_bullish_belt_hold_if_lower_shadow_present() {
+        // Identical except open > low (lower shadow present) → fails the
+        // tail_range_ratio < doji_min_ratio check.
+        let candle = (101.0, 110.0, 95.0, 109.0, 0.0);
+        assert!(!candle.is_bullish_belt_hold());
+    }
+
+    #[test]
+    fn test_is_not_bullish_belt_hold_if_bearish() {
+        // Bearish direction disqualifies even with open == low.
+        let candle = (110.0, 110.0, 100.0, 101.0, 0.0);
+        assert!(!candle.is_bullish_belt_hold());
+    }
+
+    #[test]
+    fn test_is_bearish_belt_hold() {
+        // Open == high, big body, tiny lower shadow.
+        let candle = (110.0, 110.0, 100.0, 101.0, 0.0);
+        assert!(candle.is_bearish_belt_hold());
+    }
+
+    #[test]
+    fn test_is_not_bearish_belt_hold_if_upper_shadow_present() {
+        let candle = (109.0, 115.0, 100.0, 101.0, 0.0);
+        assert!(!candle.is_bearish_belt_hold());
+    }
+
+    #[test]
+    fn test_is_not_bearish_belt_hold_if_bullish() {
+        let candle = (100.0, 110.0, 100.0, 109.0, 0.0);
+        assert!(!candle.is_bearish_belt_hold());
+    }
+
+    // ── High Wave ───────────────────────────────────────────────────────
+
+    #[test]
+    fn test_is_high_wave() {
+        // body 10 / range 60 = 0.167 (between 0.1 and 0.2)
+        // wick 25 / 60 = 0.417 (> 0.4) — both shadows long
+        let candle = (95.0, 130.0, 70.0, 105.0, 0.0);
+        assert!(candle.is_high_wave());
+    }
+
+    #[test]
+    fn test_is_not_high_wave_when_body_is_doji_size() {
+        // Body fits doji_body_ratio (< 0.1) → fails the lower-band check.
+        let candle = (100.0, 130.0, 70.0, 100.5, 0.0);
+        assert!(!candle.is_high_wave());
+    }
+
+    #[test]
+    fn test_is_not_high_wave_when_one_shadow_short() {
+        // Upper shadow shrunk; tail_range_ratio still fine but wick_range
+        // < high_wave_shadow_ratio (0.4).
+        let candle = (95.0, 110.0, 70.0, 105.0, 0.0); // wick = 5/40 = 0.125
+        assert!(!candle.is_high_wave());
+    }
+
+    // ── Four-Price Doji ─────────────────────────────────────────────────
+
+    #[test]
+    fn test_is_four_price_doji() {
+        let candle = (100.0, 100.0, 100.0, 100.0, 0.0);
+        assert!(candle.is_four_price_doji());
+    }
+
+    #[test]
+    fn test_is_not_four_price_doji_when_range_exceeds_threshold() {
+        // (high - low) / |close| = 10 / 100 = 0.1 > doji_min_ratio (0.05)
+        let candle = (100.0, 105.0, 95.0, 100.0, 0.0);
+        assert!(!candle.is_four_price_doji());
     }
 }

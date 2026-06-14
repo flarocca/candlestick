@@ -1,3 +1,9 @@
+## v0.2.5 (Jun 14, 2026)
+
+- Tier 1 (9 patterns): Piercing Line, Three Outside Up/Down, Tweezer Top/Bottom, Bullish/Bearish Harami Cross, Bullish/Bearish Kicker
+- Tier 2 (12 patterns): Bullish/Bearish Abandoned Baby, Bullish/Bearish Tri-Star, Bullish/Bearish Three Line Strike, Advance Block, Deliberation, Bullish/Bearish Belt Hold, High Wave, Four-Price Doji
+- Adds three new overridable trait methods on `CandleStick`: `tweezer_tolerance` (default 5%), `belt_hold_body_ratio` (default 70%), `high_wave_shadow_ratio` (default 40%)
+
 ## v0.2.4 (May 6, 2026)
 
 - Removed lifetime parameter  - contribution by @joelchen (#5)
