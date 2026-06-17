@@ -1,3 +1,8 @@
+## v0.2.6 (Jun 17, 2026)
+
+- Bug fix: `is_four_price_doji` was reusing `doji_min_ratio` (default 5%) as its range threshold, so any normal quiet candle whose range stayed within 5% of price got misclassified as a four-price doji. The check now uses a dedicated, much tighter `four_price_max_range_ratio` (default `1e-5` / 0.001%) so the predicate matches its semantic intent: "the market did not move at all".
+- New overridable trait method on `CandleStick`: `four_price_max_range_ratio` (default `1e-5`).
+
 ## v0.2.5 (Jun 14, 2026)
 
 - Tier 1 (9 patterns): Piercing Line, Three Outside Up/Down, Tweezer Top/Bottom, Bullish/Bearish Harami Cross, Bullish/Bearish Kicker

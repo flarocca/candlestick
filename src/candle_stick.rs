@@ -122,6 +122,23 @@ pub trait CandleStick {
         0.4
     }
 
+    /// Four-Price Doji maximum range-to-price ratio. A candle is flagged
+    /// as four-price when `(high - low) < four_price_max_range_ratio * |close|`.
+    ///
+    /// This is intentionally much tighter than [`Self::doji_min_ratio`]
+    /// (which gates the *generic* doji family at ~5%): a true four-price
+    /// doji means "the market did not move at all" — `open == high == low
+    /// == close`. The default `1e-5` (0.001%) accommodates floating-point
+    /// noise without leaking ordinary quiet candles into the four-price
+    /// classification (those are still picked up as regular `Doji` /
+    /// `Long-Legged Doji` / `Spinning Top` via the other predicates).
+    /// Can be overridden for custom ratio.
+    ///
+    /// Default: __1e-5__
+    fn four_price_max_range_ratio(&self) -> f64 {
+        1e-5
+    }
+
     /// Returns the open price
     fn open(&self) -> f64;
 
@@ -638,7 +655,7 @@ pub trait CandleStick {
     fn is_four_price_doji(&self) -> bool {
         let price = self.close().abs();
         let raw_range = self.high() - self.low();
-        raw_range < self.doji_min_ratio() * price
+        raw_range < self.four_price_max_range_ratio() * price
     }
 
     /// Summarizes the price action for the candle
@@ -786,8 +803,34 @@ mod tests {
 
     #[test]
     fn test_is_not_four_price_doji_when_range_exceeds_threshold() {
-        // (high - low) / |close| = 10 / 100 = 0.1 > doji_min_ratio (0.05)
+        // (high - low) / |close| = 10 / 100 = 0.1 ≫ four_price_max_range_ratio (1e-5)
         let candle = (100.0, 105.0, 95.0, 100.0, 0.0);
         assert!(!candle.is_four_price_doji());
+    }
+
+    #[test]
+    fn test_quiet_candle_is_not_four_price_doji() {
+        // Regression: prior to 2026-06-17, `is_four_price_doji` reused
+        // `doji_min_ratio` (5%), so any candle with `range < 5% × price`
+        // — i.e. every ordinary quiet candle on a liquid instrument —
+        // got flagged as a four-price doji and emitted the "extreme
+        // indecision / illiquidity" label. After the fix the threshold
+        // is `four_price_max_range_ratio` (1e-5 default), so only
+        // truly-flat candles match.
+        //
+        // BTC at $100k with a $50 range (0.05% of price) is a normal
+        // quiet candle and MUST NOT be classified as four-price.
+        let candle = (100_000.0, 100_025.0, 99_975.0, 100_000.0, 0.0);
+        assert!(!candle.is_four_price_doji());
+    }
+
+    #[test]
+    fn test_almost_flat_candle_passes_four_price_doji() {
+        // Edge: floating-point noise must not push a truly-flat candle
+        // out of the classification. A candle at BTC $100k with $0.10
+        // range (1e-6 = 0.0001% of price) is well below the 1e-5
+        // threshold, so it still classifies as four-price.
+        let candle = (100_000.0, 100_000.05, 99_999.95, 100_000.0, 0.0);
+        assert!(candle.is_four_price_doji());
     }
 }
